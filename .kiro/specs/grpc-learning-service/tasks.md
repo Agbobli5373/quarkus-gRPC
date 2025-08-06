@@ -566,7 +566,7 @@ This implementation plan guides you through building a comprehensive gRPC learni
 
 ### Phase 5: REST Integration
 
-- [ ] 13. Implement REST endpoints with gRPC client integration
+- [-] 13. Implement REST endpoints with gRPC client integration
 
   **Learning Objectives:**
 
