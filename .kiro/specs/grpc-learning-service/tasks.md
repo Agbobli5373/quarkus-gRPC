@@ -397,7 +397,7 @@ This implementation plan guides you through building a comprehensive gRPC learni
 
   _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 6.1, 6.2, 6.3, 6.4, 7.1, 7.2, 7.3, 7.4_
 
-- [ ] 9. Implement server streaming in gRPC service
+- [x] 9. Implement server streaming in gRPC service
 
   **Learning Objectives:**
 
@@ -435,7 +435,7 @@ This implementation plan guides you through building a comprehensive gRPC learni
 
   _Requirements: 2.1, 2.2, 2.3, 6.1, 6.2, 6.3, 6.4, 7.1, 7.2, 7.3, 7.4_
 
-- [ ] 10. Implement client streaming in gRPC service
+- [x] 10. Implement client streaming in gRPC service
 
   **Learning Objectives:**
 
@@ -476,7 +476,7 @@ This implementation plan guides you through building a comprehensive gRPC learni
 
   _Requirements: 3.1, 3.2, 3.3, 6.1, 6.2, 6.3, 6.4, 7.1, 7.2, 7.3, 7.4_
 
-- [ ] 11. Implement bidirectional streaming in gRPC service
+- [x] 11. Implement bidirectional streaming in gRPC service
 
   **Learning Objectives:**
 
@@ -517,7 +517,7 @@ This implementation plan guides you through building a comprehensive gRPC learni
 
   _Requirements: 4.1, 4.2, 4.3,1,.4, 7.1, 7.2, 7.3, 7.4_
 
-- [ ] 12. Create gRPC error handling infrastructure
+- [-] 12. Create gRPC error handling infrastructure
 
   **Learning Objectives:**
 

@@ -3,9 +3,11 @@ package org.isaac.grpc.user;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
+import org.isaac.exception.GrpcExceptionHandler;
 import org.isaac.exception.UserNotFoundException;
 import org.isaac.exception.ValidationException;
 import org.isaac.grpc.user.UserProto.*;
+import org.isaac.service.NotificationService;
 import org.isaac.service.UserBusinessService;
 
 import java.util.logging.Logger;
@@ -30,6 +32,12 @@ public class UserGrpcService implements UserService {
     @Inject
     UserBusinessService userBusinessService;
 
+    @Inject
+    NotificationService notificationService;
+
+    @Inject
+    GrpcExceptionHandler exceptionHandler;
+
     /**
      * Creates a new user.
      * 
@@ -45,7 +53,7 @@ public class UserGrpcService implements UserService {
 
         return userBusinessService.createUser(request)
                 .onItem().invoke(user -> logger.info("gRPC createUser completed for user: " + user.getId()))
-                .onFailure().transform(this::mapToGrpcException);
+                .onFailure().transform(throwable -> exceptionHandler.mapException(throwable, "createUser"));
     }
 
     /**
@@ -62,7 +70,7 @@ public class UserGrpcService implements UserService {
 
         return userBusinessService.getUser(request.getId())
                 .onItem().invoke(user -> logger.info("gRPC getUser completed for user: " + user.getId()))
-                .onFailure().transform(this::mapToGrpcException);
+                .onFailure().transform(throwable -> exceptionHandler.mapException(throwable, "getUser"));
     }
 
     /**
@@ -79,7 +87,7 @@ public class UserGrpcService implements UserService {
 
         return userBusinessService.updateUser(request)
                 .onItem().invoke(user -> logger.info("gRPC updateUser completed for user: " + user.getId()))
-                .onFailure().transform(this::mapToGrpcException);
+                .onFailure().transform(throwable -> exceptionHandler.mapException(throwable, "updateUser"));
     }
 
     /**
@@ -103,61 +111,167 @@ public class UserGrpcService implements UserService {
                             .setMessage("User deleted successfully")
                             .build();
                 })
-                .onFailure().transform(this::mapToGrpcException);
+                .onFailure().transform(throwable -> exceptionHandler.mapException(throwable, "deleteUser"));
     }
 
     // Note: The following methods are for streaming operations and will be
     // implemented in later tasks
 
+    /**
+     * Lists all users using server streaming.
+     * 
+     * Server Streaming RPC: Client sends single Empty request, server returns
+     * stream of User responses.
+     * This pattern is useful for large datasets or real-time updates where the
+     * server needs to
+     * send multiple responses for a single client request.
+     * 
+     * Key concepts demonstrated:
+     * - Multi<T> for streaming responses
+     * - Proper error handling in streams
+     * - Stream lifecycle management
+     * - Backpressure handling (handled automatically by Mutiny)
+     * 
+     * @param request Empty request (no parameters needed)
+     * @return Multi<User> streaming all users individually
+     */
     @Override
     public io.smallrye.mutiny.Multi<User> listUsers(Empty request) {
-        // This will be implemented in task 9 (server streaming)
-        throw new UnsupportedOperationException("Server streaming not yet implemented");
-    }
+        logger.info("gRPC listUsers called - starting server streaming");
 
-    @Override
-    public Uni<CreateUsersResponse> createUsers(io.smallrye.mutiny.Multi<CreateUserRequest> request) {
-        // This will be implemented in task 10 (client streaming)
-        throw new UnsupportedOperationException("Client streaming not yet implemented");
-    }
-
-    @Override
-    public io.smallrye.mutiny.Multi<UserNotification> subscribeToUserUpdates(
-            io.smallrye.mutiny.Multi<SubscribeRequest> request) {
-        // This will be implemented in task 11 (bidirectional streaming)
-        throw new UnsupportedOperationException("Bidirectional streaming not yet implemented");
+        return userBusinessService.getAllUsers()
+                .onItem().invoke(user -> logger.fine("Streaming user: " + user.getId() + " (" + user.getName() + ")"))
+                .onCompletion().invoke(() -> logger.info("gRPC listUsers streaming completed"))
+                .onFailure().invoke(error -> logger.severe("Streaming error in listUsers: " + error.getMessage()))
+                .onFailure().transform(throwable -> exceptionHandler.mapException(throwable, "listUsers"));
     }
 
     /**
-     * Maps business exceptions to appropriate gRPC status exceptions.
+     * Creates multiple users using client streaming.
      * 
-     * This method demonstrates proper error handling in gRPC services by:
-     * - Converting business exceptions to gRPC status codes
-     * - Providing appropriate error messages
-     * - Following gRPC error handling best practices
+     * Client Streaming RPC: Client sends stream of CreateUserRequest, server
+     * returns single CreateUsersResponse.
+     * This pattern is useful for bulk operations where the client has multiple
+     * items to process
+     * and wants a summary response after all items are processed.
      * 
-     * @param throwable the business exception to map
-     * @return RuntimeException with appropriate gRPC status
+     * Key concepts demonstrated:
+     * - Multi<T> for receiving streaming requests
+     * - Batch processing with error collection
+     * - Graceful handling of partial failures
+     * - Summary response generation
+     * 
+     * The implementation processes each request individually, collecting both
+     * successes and failures,
+     * then returns a comprehensive summary to the client.
+     * 
+     * @param requests Multi stream of CreateUserRequest from client
+     * @return Uni<CreateUsersResponse> containing batch operation summary
      */
-    private RuntimeException mapToGrpcException(Throwable throwable) {
-        logger.warning("Mapping exception to gRPC status: " + throwable.getClass().getSimpleName() + " - "
-                + throwable.getMessage());
+    @Override
+    public Uni<CreateUsersResponse> createUsers(io.smallrye.mutiny.Multi<CreateUserRequest> requests) {
+        logger.info("gRPC createUsers called - starting client streaming");
 
-        if (throwable instanceof UserNotFoundException) {
-            return io.grpc.Status.NOT_FOUND
-                    .withDescription(throwable.getMessage())
-                    .asRuntimeException();
-        }
-
-        if (throwable instanceof ValidationException) {
-            return io.grpc.Status.INVALID_ARGUMENT
-                    .withDescription(throwable.getMessage())
-                    .asRuntimeException();
-        }
-
-        // For any other exception, return INTERNAL error
-        return io.grpc.Status.INTERNAL
-                .withDescription("Internal server error")
-                .asRuntimeException();
+        return userBusinessService.createMultipleUsers(requests)
+                .invoke(response -> logger.info(String.format(
+                        "gRPC createUsers completed - created: %d, errors: %d",
+                        response.getCreatedCount(),
+                        response.getErrorsCount())))
+                .onFailure()
+                .invoke(error -> logger.severe("Client streaming error in createUsers: " + error.getMessage()))
+                .onFailure().transform(throwable -> exceptionHandler.mapException(throwable, "createUsers"));
     }
+
+    /**
+     * Subscribes to real-time user updates using bidirectional streaming.
+     * 
+     * Bidirectional Streaming RPC: Client sends stream of SubscribeRequest, server
+     * returns stream of UserNotification.
+     * This is the most complex gRPC pattern, enabling real-time, full-duplex
+     * communication.
+     * 
+     * Key concepts demonstrated:
+     * - Bidirectional streaming with Multi<T> for both input and output
+     * - Real-time subscription management
+     * - Client lifecycle handling (connection/disconnection)
+     * - Resource cleanup on stream cancellation
+     * - Integration with notification service for broadcasting
+     * 
+     * The implementation:
+     * 1. Processes incoming subscription requests from clients
+     * 2. Manages client subscriptions through the notification service
+     * 3. Returns a stream of notifications for subscribed clients
+     * 4. Handles client disconnections and cleanup automatically
+     * 
+     * @param requests Multi stream of SubscribeRequest from clients
+     * @return Multi<UserNotification> stream of notifications to clients
+     */
+    @Override
+    public io.smallrye.mutiny.Multi<UserNotification> subscribeToUserUpdates(
+            io.smallrye.mutiny.Multi<SubscribeRequest> requests) {
+        logger.info("gRPC subscribeToUserUpdates called - starting bidirectional streaming");
+
+        return requests
+                .onItem().transformToMultiAndConcatenate(this::handleSubscriptionRequest)
+                .onCancellation().invoke(() -> {
+                    logger.info("gRPC subscribeToUserUpdates - client disconnected, cleaning up");
+                })
+                .onFailure().invoke(error -> {
+                    logger.severe("Bidirectional streaming error in subscribeToUserUpdates: " + error.getMessage());
+                })
+                .onFailure().transform(throwable -> exceptionHandler.mapException(throwable, "subscribeToUserUpdates"));
+    }
+
+    /**
+     * Handles individual subscription requests from clients.
+     * 
+     * This method processes each SubscribeRequest and establishes a subscription
+     * with the notification service. It demonstrates:
+     * - Client ID management (generate if not provided)
+     * - Subscription lifecycle management
+     * - Integration with notification service
+     * - Proper logging for debugging and learning
+     * 
+     * @param subscribeRequest the subscription request from a client
+     * @return Multi<UserNotification> stream of notifications for this client
+     */
+    private io.smallrye.mutiny.Multi<UserNotification> handleSubscriptionRequest(SubscribeRequest subscribeRequest) {
+        String clientId = subscribeRequest.getClientId();
+
+        // Generate client ID if not provided
+        if (clientId == null || clientId.trim().isEmpty()) {
+            clientId = notificationService.generateClientId();
+            logger.info("Generated client ID for subscription: " + clientId);
+        } else {
+            logger.info("Processing subscription request for client: " + clientId);
+        }
+
+        // Log the notification types the client is interested in
+        if (subscribeRequest.getNotificationTypesCount() > 0) {
+            logger.info("Client " + clientId + " subscribing to notification types: " +
+                    subscribeRequest.getNotificationTypesList());
+        } else {
+            logger.info("Client " + clientId + " subscribing to all notification types");
+        }
+
+        // Subscribe the client to notifications
+        final String finalClientId = clientId;
+        return notificationService.subscribe(finalClientId)
+                .onItem().invoke(notification -> {
+                    logger.fine("Sending notification to client " + finalClientId + ": " +
+                            notification.getType() + " for user " + notification.getUser().getId());
+                })
+                .onCompletion().invoke(() -> {
+                    logger.info("Subscription completed for client: " + finalClientId);
+                })
+                .onCancellation().invoke(() -> {
+                    logger.info("Subscription cancelled for client: " + finalClientId);
+                    notificationService.unsubscribe(finalClientId);
+                })
+                .onFailure().invoke(error -> {
+                    logger.warning("Subscription error for client " + finalClientId + ": " + error.getMessage());
+                    notificationService.unsubscribe(finalClientId);
+                });
+    }
+
 }
