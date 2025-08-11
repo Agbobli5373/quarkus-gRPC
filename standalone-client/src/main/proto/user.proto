@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+package userservice;
+
+option java_package = "org.isaac.grpc.user";
+option java_outer_classname = "UserProto";
+
+// Core User message representing a user entity
+message User {
+  string id = 1;
+  string name = 2;
+  string email = 3;
+  int64 created_at = 4;
+  int64 updated_at = 5;
+}
+
+// Request message for creating a new user
+message CreateUserRequest {
+  string name = 1;
+  string email = 2;
+}
+
+// Request message for retrieving a user by ID
+message GetUserRequest {
+  string id = 1;
+}
+
+// Request message for updating an existing user
+message UpdateUserRequest {
+  string id = 1;
+  string name = 2;
+  string email = 3;
+}
+
+// Request message for deleting a user
+message DeleteUserRequest {
+  string id = 1;
+}
+
+// Response message for delete operations
+message DeleteUserResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Response message for batch user creation (client streaming)
+message CreateUsersResponse {
+  int32 created_count = 1;
+  repeated string errors = 2;
+  repeated string created_user_ids = 3;
+}
+
+// Empty message for operations that don't require parameters
+message Empty {}
+
+// Notification message for real-time user updates
+message UserNotification {
+  enum NotificationType {
+    CREATED = 0;
+    UPDATED = 1;
+    DELETED = 2;
+  }
+  
+  NotificationType type = 1;
+  User user = 2;
+  int64 timestamp = 3;
+  string message = 4;
+}
+
+// Request message for subscribing to user updates
+message SubscribeRequest {
+  string client_id = 1;
+  repeated UserNotification.NotificationType notification_types = 2;
+}
+
+// UserService definition with all four gRPC method types
+service UserService {
+  // Unary RPC methods: single request → single response
+  
+  // Creates a new user and returns the created user
+  rpc CreateUser(CreateUserRequest) returns (User);
+  
+  // Retrieves a user by ID
+  rpc GetUser(GetUserRequest) returns (User);
+  
+  // Updates an existing user and returns the updated user
+  rpc UpdateUser(UpdateUserRequest) returns (User);
+  
+  // Deletes a user and returns confirmation
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+
+  // Server streaming RPC: single request → stream of responses
+  
+  // Lists all users, streaming each user individually
+  rpc ListUsers(Empty) returns (stream User);
+
+  // Client streaming RPC: stream of requests → single response
+  
+  // Creates multiple users from a stream of requests and returns summary
+  rpc CreateUsers(stream CreateUserRequest) returns (CreateUsersResponse);
+
+  // Bidirectional streaming RPC: stream of requests ↔ stream of responses
+  
+  // Subscribes to real-time user updates with bidirectional communication
+  rpc SubscribeToUserUpdates(stream SubscribeRequest) returns (stream UserNotification);
+}
