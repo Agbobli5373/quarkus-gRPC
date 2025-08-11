@@ -15,6 +15,8 @@ import org.isaac.validation.UserValidator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
+import java.time.Instant;
+import org.isaac.monitoring.LoggingUtils;
 
 /**
  * Business service layer for user operations.
@@ -34,18 +36,17 @@ public class UserBusinessService {
 
     private static final Logger logger = Logger.getLogger(UserBusinessService.class.getName());
 
-
     private final UserRepository userRepository;
 
-    private final  UserValidator userValidator;
+    private final UserValidator userValidator;
 
-    private final  NotificationService notificationService;
+    private final NotificationService notificationService;
+
     @Inject
     public UserBusinessService(
             UserRepository userRepository,
             UserValidator userValidator,
-            NotificationService notificationService
-    ) {
+            NotificationService notificationService) {
         this.userRepository = userRepository;
         this.userValidator = userValidator;
         this.notificationService = notificationService;
@@ -63,7 +64,9 @@ public class UserBusinessService {
      * @return Uni<User> containing the created user
      */
     public Uni<User> createUser(CreateUserRequest request) {
-        logger.info("Creating user with name: " + request.getName());
+        Instant startTime = Instant.now();
+        LoggingUtils.logOperationStart(logger, "business.createUser",
+                String.format("name=%s, email=%s", request.getName(), request.getEmail()));
 
         return userValidator.validateCreateRequest(request)
                 .chain(() -> {
@@ -71,10 +74,17 @@ public class UserBusinessService {
                     return userRepository.save(user);
                 })
                 .invoke(user -> {
-                    logger.info("User created successfully: " + user.getId());
+                    LoggingUtils.setUserId(user.getId());
+                    LoggingUtils.logOperationEnd(logger, "business.createUser", startTime,
+                            String.format("userId=%s", user.getId()));
                     notificationService.broadcastUserCreated(user);
+                    LoggingUtils.logMetric(logger, "business.users.created", 1, "count");
                 })
-                .onFailure().invoke(throwable -> logger.warning("Failed to create user: " + throwable.getMessage()));
+                .onFailure().invoke(throwable -> {
+                    LoggingUtils.logOperationError(logger, "business.createUser", throwable,
+                            String.format("name=%s", request.getName()));
+                    LoggingUtils.logMetric(logger, "business.users.create_failed", 1, "count");
+                });
     }
 
     /**

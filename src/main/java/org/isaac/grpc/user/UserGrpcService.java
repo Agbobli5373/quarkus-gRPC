@@ -9,8 +9,9 @@ import org.isaac.grpc.user.UserProto.*;
 import org.isaac.service.NotificationService;
 import org.isaac.service.UserBusinessService;
 
-import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.time.Instant;
+import org.isaac.monitoring.LoggingUtils;
 
 /**
  * gRPC service implementation for user management operations.
@@ -29,20 +30,17 @@ public class UserGrpcService implements UserService {
 
     private static final Logger logger = Logger.getLogger(UserGrpcService.class.getName());
 
-
     private final UserBusinessService userBusinessService;
-
 
     private final NotificationService notificationService;
 
-
     private final GrpcExceptionHandler exceptionHandler;
+
     @Inject
     public UserGrpcService(
             UserBusinessService userBusinessService,
             NotificationService notificationService,
-            GrpcExceptionHandler exceptionHandler
-    ) {
+            GrpcExceptionHandler exceptionHandler) {
         this.userBusinessService = userBusinessService;
         this.notificationService = notificationService;
         this.exceptionHandler = exceptionHandler;
@@ -61,10 +59,22 @@ public class UserGrpcService implements UserService {
      */
     @Override
     public Uni<User> createUser(CreateUserRequest request) {
-        logger.info("gRPC createUser called for: " + request.getName());
+        Instant startTime = Instant.now();
+        LoggingUtils.logOperationStart(logger, "grpc.createUser",
+                String.format("name=%s, email=%s", request.getName(), request.getEmail()));
 
         return userBusinessService.createUser(request)
-                .onItem().invoke(user -> logger.info("gRPC createUser completed for user: " + user.getId()))
+                .onItem().invoke(user -> {
+                    LoggingUtils.setUserId(user.getId());
+                    LoggingUtils.logOperationEnd(logger, "grpc.createUser", startTime,
+                            String.format("userId=%s", user.getId()));
+                    LoggingUtils.logMetric(logger, "grpc.createUser.success", 1, "count");
+                })
+                .onFailure().invoke(throwable -> {
+                    LoggingUtils.logOperationError(logger, "grpc.createUser", throwable,
+                            String.format("name=%s", request.getName()));
+                    LoggingUtils.logMetric(logger, "grpc.createUser.error", 1, "count");
+                })
                 .onFailure().transform(throwable -> exceptionHandler.mapException(throwable, "createUser"));
     }
 
@@ -78,10 +88,22 @@ public class UserGrpcService implements UserService {
      */
     @Override
     public Uni<User> getUser(GetUserRequest request) {
-        logger.info("gRPC getUser called for ID: " + request.getId());
+        Instant startTime = Instant.now();
+        LoggingUtils.setUserId(request.getId());
+        LoggingUtils.logOperationStart(logger, "grpc.getUser",
+                String.format("userId=%s", request.getId()));
 
         return userBusinessService.getUser(request.getId())
-                .onItem().invoke(user -> logger.info("gRPC getUser completed for user: " + user.getId()))
+                .onItem().invoke(user -> {
+                    LoggingUtils.logOperationEnd(logger, "grpc.getUser", startTime,
+                            String.format("userId=%s, found=true", user.getId()));
+                    LoggingUtils.logMetric(logger, "grpc.getUser.success", 1, "count");
+                })
+                .onFailure().invoke(throwable -> {
+                    LoggingUtils.logOperationError(logger, "grpc.getUser", throwable,
+                            String.format("userId=%s", request.getId()));
+                    LoggingUtils.logMetric(logger, "grpc.getUser.error", 1, "count");
+                })
                 .onFailure().transform(throwable -> exceptionHandler.mapException(throwable, "getUser"));
     }
 
@@ -149,12 +171,28 @@ public class UserGrpcService implements UserService {
      */
     @Override
     public Multi<User> listUsers(Empty request) {
-        logger.info("gRPC listUsers called - starting server streaming");
+        LoggingUtils.logStreamingEvent(logger, "started", "server", "listUsers operation");
+        Instant startTime = Instant.now();
+        final int[] userCount = { 0 };
 
         return userBusinessService.getAllUsers()
-                .onItem().invoke(user -> logger.fine("Streaming user: " + user.getId() + " (" + user.getName() + ")"))
-                .onCompletion().invoke(() -> logger.info("gRPC listUsers streaming completed"))
-                .onFailure().invoke(error -> logger.severe("Streaming error in listUsers: " + error.getMessage()))
+                .onItem().invoke(user -> {
+                    userCount[0]++;
+                    LoggingUtils.logStreamingEvent(logger, "item", "server",
+                            String.format("streaming user %s (%s)", user.getId(), user.getName()));
+                })
+                .onCompletion().invoke(() -> {
+                    LoggingUtils.logStreamingEvent(logger, "completed", "server",
+                            String.format("streamed %d users", userCount[0]));
+                    LoggingUtils.logMetric(logger, "grpc.listUsers.streamed_count", userCount[0], "count");
+                    LoggingUtils.logMetric(logger, "grpc.listUsers.duration",
+                            java.time.Duration.between(startTime, Instant.now()).toMillis(), "ms");
+                })
+                .onFailure().invoke(error -> {
+                    LoggingUtils.logStreamingEvent(logger, "error", "server",
+                            String.format("listUsers failed: %s", error.getMessage()));
+                    LoggingUtils.logMetric(logger, "grpc.listUsers.error", 1, "count");
+                })
                 .onFailure().transform(throwable -> exceptionHandler.mapException(throwable, "listUsers"));
     }
 
@@ -182,15 +220,26 @@ public class UserGrpcService implements UserService {
      */
     @Override
     public Uni<CreateUsersResponse> createUsers(Multi<CreateUserRequest> requests) {
-        logger.info("gRPC createUsers called - starting client streaming");
+        LoggingUtils.logStreamingEvent(logger, "started", "client", "createUsers batch operation");
+        Instant startTime = Instant.now();
 
         return userBusinessService.createMultipleUsers(requests)
-                .invoke(response -> logger.info(String.format(
-                        "gRPC createUsers completed - created: %d, errors: %d",
-                        response.getCreatedCount(),
-                        response.getErrorsCount())))
-                .onFailure()
-                .invoke(error -> logger.severe("Client streaming error in createUsers: " + error.getMessage()))
+                .invoke(response -> {
+                    LoggingUtils.logStreamingEvent(logger, "completed", "client",
+                            String.format("created: %d, errors: %d",
+                                    response.getCreatedCount(), response.getErrorsCount()));
+                    LoggingUtils.logMetric(logger, "grpc.createUsers.created_count",
+                            response.getCreatedCount(), "count");
+                    LoggingUtils.logMetric(logger, "grpc.createUsers.error_count",
+                            response.getErrorsCount(), "count");
+                    LoggingUtils.logMetric(logger, "grpc.createUsers.duration",
+                            java.time.Duration.between(startTime, Instant.now()).toMillis(), "ms");
+                })
+                .onFailure().invoke(error -> {
+                    LoggingUtils.logStreamingEvent(logger, "error", "client",
+                            String.format("createUsers failed: %s", error.getMessage()));
+                    LoggingUtils.logMetric(logger, "grpc.createUsers.batch_error", 1, "count");
+                })
                 .onFailure().transform(throwable -> exceptionHandler.mapException(throwable, "createUsers"));
     }
 
@@ -221,12 +270,21 @@ public class UserGrpcService implements UserService {
     @Override
     public Multi<UserNotification> subscribeToUserUpdates(
             Multi<SubscribeRequest> requests) {
-        logger.info("gRPC subscribeToUserUpdates called - starting bidirectional streaming");
+        LoggingUtils.logStreamingEvent(logger, "started", "bidirectional",
+                "subscribeToUserUpdates operation");
 
         return requests
                 .onItem().transformToMultiAndConcatenate(this::handleSubscriptionRequest)
-                .onCancellation().invoke(() -> logger.info("gRPC subscribeToUserUpdates - client disconnected, cleaning up"))
-                .onFailure().invoke(error -> logger.severe("Bidirectional streaming error in subscribeToUserUpdates: " + error.getMessage()))
+                .onCancellation().invoke(() -> {
+                    LoggingUtils.logStreamingEvent(logger, "cancelled", "bidirectional",
+                            "client disconnected, cleaning up subscriptions");
+                    LoggingUtils.logMetric(logger, "grpc.subscriptions.cancelled", 1, "count");
+                })
+                .onFailure().invoke(error -> {
+                    LoggingUtils.logStreamingEvent(logger, "error", "bidirectional",
+                            String.format("subscribeToUserUpdates failed: %s", error.getMessage()));
+                    LoggingUtils.logMetric(logger, "grpc.subscriptions.error", 1, "count");
+                })
                 .onFailure().transform(throwable -> exceptionHandler.mapException(throwable, "subscribeToUserUpdates"));
     }
 
@@ -252,43 +310,51 @@ public class UserGrpcService implements UserService {
             clientId = notificationService.generateClientId();
             generated = true;
         }
-        if (logger.isLoggable(Level.INFO)) {
-            if (generated) {
-                logger.info(String.format("Generated client ID for subscription: %s", clientId));
-            } else {
-                logger.info(String.format("Processing subscription request for client: %s", clientId));
-            }
+
+        LoggingUtils.setClientId(clientId);
+
+        if (generated) {
+            LoggingUtils.logStreamingEvent(logger, "client-generated", "bidirectional",
+                    String.format("generated client ID: %s", clientId));
+        } else {
+            LoggingUtils.logStreamingEvent(logger, "client-connected", "bidirectional",
+                    String.format("processing subscription for client: %s", clientId));
         }
 
         // Log the notification types the client is interested in
-        if (logger.isLoggable(Level.INFO)) {
-            if (subscribeRequest.getNotificationTypesCount() > 0) {
-                logger.info(String.format("Client %s subscribing to notification types: %s", clientId, subscribeRequest.getNotificationTypesList()));
-            } else {
-                logger.info(String.format("Client %s subscribing to all notification types", clientId));
-            }
+        if (subscribeRequest.getNotificationTypesCount() > 0) {
+            LoggingUtils.logStreamingEvent(logger, "subscription-filter", "bidirectional",
+                    String.format("client %s subscribing to types: %s", clientId,
+                            subscribeRequest.getNotificationTypesList()));
+        } else {
+            LoggingUtils.logStreamingEvent(logger, "subscription-all", "bidirectional",
+                    String.format("client %s subscribing to all notification types", clientId));
         }
 
         // Subscribe the client to notifications
         final String finalClientId = clientId;
         return notificationService.subscribe(finalClientId)
                 .onItem().invoke(notification -> {
-                    if (logger.isLoggable(Level.FINE)) {
-                        logger.fine(String.format("Sending notification to client %s: %s for user %s", finalClientId, notification.getType(), notification.getUser().getId()));
-                    }
+                    LoggingUtils.logStreamingEvent(logger, "notification-sent", "bidirectional",
+                            String.format("client %s: %s for user %s", finalClientId,
+                                    notification.getType(), notification.getUser().getId()));
+                    LoggingUtils.logMetric(logger, "grpc.notifications.sent", 1, "count");
                 })
                 .onCompletion().invoke(() -> {
-                    if (logger.isLoggable(Level.INFO)) {
-                        logger.info(String.format("Subscription completed for client: %s", finalClientId));
-                    }
+                    LoggingUtils.logStreamingEvent(logger, "subscription-completed", "bidirectional",
+                            String.format("client: %s", finalClientId));
                 })
                 .onCancellation().invoke(() -> {
-                    logger.info("Subscription cancelled for client: " + finalClientId);
+                    LoggingUtils.logStreamingEvent(logger, "subscription-cancelled", "bidirectional",
+                            String.format("client: %s", finalClientId));
                     notificationService.unsubscribe(finalClientId);
+                    LoggingUtils.logMetric(logger, "grpc.subscriptions.unsubscribed", 1, "count");
                 })
                 .onFailure().invoke(error -> {
-                    logger.warning("Subscription error for client " + finalClientId + ": " + error.getMessage());
+                    LoggingUtils.logStreamingEvent(logger, "subscription-error", "bidirectional",
+                            String.format("client %s: %s", finalClientId, error.getMessage()));
                     notificationService.unsubscribe(finalClientId);
+                    LoggingUtils.logMetric(logger, "grpc.subscriptions.error", 1, "count");
                 });
     }
 
