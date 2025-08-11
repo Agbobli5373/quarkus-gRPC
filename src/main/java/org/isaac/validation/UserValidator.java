@@ -14,11 +14,11 @@ import java.util.regex.Pattern;
 
 /**
  * Service for validating business rules related to user operations.
- * 
+ * <p>
  * This validator handles business-level validation that goes beyond simple
  * input validation. It includes rules like email uniqueness, name format
  * requirements, and other domain-specific constraints.
- * 
+ * <p>
  * Learning objectives:
  * - Understand business validation vs input validation
  * - Learn about custom validation logic
@@ -27,8 +27,8 @@ import java.util.regex.Pattern;
 @ApplicationScoped
 public class UserValidator {
 
-    @Inject
-    UserRepository userRepository;
+
+    private final UserRepository userRepository;
 
     // Business rules constants
     private static final int MIN_NAME_LENGTH = 2;
@@ -37,10 +37,14 @@ public class UserValidator {
             "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)*\\.[a-zA-Z]{2,}$");
     private static final Pattern NAME_PATTERN = Pattern.compile(
             "^[\\p{L}\\s'-]+$");
+    @Inject
+    public UserValidator(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
 
     /**
      * Validates a create user request according to business rules.
-     * 
+     * <p>
      * Business rules validated:
      * - Name format and length requirements
      * - Email format and uniqueness
@@ -58,7 +62,7 @@ public class UserValidator {
 
     /**
      * Validates an update user request according to business rules.
-     * 
+     * <p>
      * Business rules validated:
      * - Name format and length requirements
      * - Email format and uniqueness (excluding the user being updated)
@@ -96,12 +100,9 @@ public class UserValidator {
         }
 
         return emailExistsCheck
-                .chain(exists -> {
-                    if (exists) {
-                        return Uni.createFrom().failure(new DuplicateEmailException(email));
-                    }
-                    return Uni.createFrom().voidItem();
-                })
+                .chain(exists -> exists
+                    ? Uni.createFrom().failure(new DuplicateEmailException(email))
+                    : Uni.createFrom().voidItem())
                 .onFailure().transform(throwable -> {
                     if (throwable instanceof DuplicateEmailException) {
                         return throwable;
@@ -134,13 +135,10 @@ public class UserValidator {
                     return nameMatches && !shouldExclude;
                 })
                 .collect().first()
-                .chain(existingUser -> {
-                    if (existingUser != null) {
-                        return Uni.createFrom().failure(
-                                new ValidationException(String.format("User with name '%s' already exists", name)));
-                    }
-                    return Uni.createFrom().voidItem();
-                })
+                .chain(existingUser -> existingUser != null
+                    ? Uni.createFrom().failure(new ValidationException(
+                        String.format("User with name '%s' already exists", name)))
+                    : Uni.createFrom().voidItem())
                 .onFailure().transform(throwable -> {
                     if (throwable instanceof ValidationException) {
                         return throwable;
@@ -171,7 +169,7 @@ public class UserValidator {
 
     /**
      * Validates name format according to business rules.
-     * 
+     * <p>
      * Rules:
      * - Cannot be null or empty
      * - Must be between MIN_NAME_LENGTH and MAX_NAME_LENGTH characters
@@ -212,7 +210,7 @@ public class UserValidator {
 
     /**
      * Validates email format according to business rules.
-     * 
+     * <p>
      * Rules:
      * - Cannot be null or empty
      * - Must match a valid email pattern

@@ -12,7 +12,7 @@ import java.util.UUID;
  * Repository for managing User entities using in-memory storage.
  * This implementation uses ConcurrentHashMap for thread-safe operations
  * and returns Mutiny reactive types (Uni/Multi) for non-blocking operations.
- * 
+ * <p>
  * Learning objectives:
  * - Understand reactive programming with Mutiny
  * - Learn about concurrent data structures for thread safety

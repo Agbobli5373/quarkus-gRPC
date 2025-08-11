@@ -18,12 +18,12 @@ import java.util.logging.Logger;
 
 /**
  * Business service layer for user operations.
- * 
+ * <p>
  * This service orchestrates between repository, validator, and notification
  * services
  * to handle complex business workflows and manage error propagation across
  * service boundaries.
- * 
+ * <p>
  * Learning objectives:
  * - Understand service layer architecture
  * - Learn about orchestrating multiple services
@@ -34,18 +34,26 @@ public class UserBusinessService {
 
     private static final Logger logger = Logger.getLogger(UserBusinessService.class.getName());
 
-    @Inject
-    UserRepository userRepository;
 
-    @Inject
-    UserValidator userValidator;
+    private final UserRepository userRepository;
 
+    private final  UserValidator userValidator;
+
+    private final  NotificationService notificationService;
     @Inject
-    NotificationService notificationService;
+    public UserBusinessService(
+            UserRepository userRepository,
+            UserValidator userValidator,
+            NotificationService notificationService
+    ) {
+        this.userRepository = userRepository;
+        this.userValidator = userValidator;
+        this.notificationService = notificationService;
+    }
 
     /**
      * Creates a new user with validation and notification.
-     * 
+     * <p>
      * This method demonstrates service orchestration by:
      * 1. Validating the request using the validator
      * 2. Building and saving the user via repository
@@ -88,7 +96,7 @@ public class UserBusinessService {
 
     /**
      * Updates an existing user with validation and notification.
-     * 
+     * <p>
      * This method demonstrates error handling and service orchestration by:
      * 1. Validating the update request
      * 2. Updating the user via repository
@@ -159,7 +167,7 @@ public class UserBusinessService {
 
     /**
      * Creates multiple users from a stream of requests.
-     * 
+     * <p>
      * This method demonstrates batch processing with error collection:
      * 1. Processes each request individually
      * 2. Collects both successes and failures

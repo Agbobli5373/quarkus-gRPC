@@ -3,7 +3,7 @@ package org.isaac.exception;
 /**
  * Base exception for validation errors in the user service.
  * This exception is thrown when business validation rules are violated.
- * 
+ * <p>
  * Learning objectives:
  * - Understand custom exception hierarchies
  * - Learn about business validation vs input validation

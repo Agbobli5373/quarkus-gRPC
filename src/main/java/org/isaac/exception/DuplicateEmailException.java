@@ -3,7 +3,7 @@ package org.isaac.exception;
 /**
  * Exception thrown when attempting to create or update a user with an email
  * that already exists in the system.
- * 
+ * <p>
  * This is a specific type of validation exception that handles email uniqueness
  * business rules.
  */

@@ -10,7 +10,6 @@ import org.isaac.dto.ErrorResponse;
 import org.jboss.logging.Logger;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Exception mapper for REST endpoints that handles validation errors
@@ -28,7 +27,7 @@ public class RestExceptionMapper implements ExceptionMapper<ConstraintViolationE
         List<String> validationErrors = exception.getConstraintViolations()
                 .stream()
                 .map(ConstraintViolation::getMessage)
-                .collect(Collectors.toList());
+                .toList();
 
         ErrorResponse errorResponse = new ErrorResponse(
                 "Validation failed",

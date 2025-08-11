@@ -9,13 +9,13 @@ import java.util.logging.Logger;
 /**
  * Centralized gRPC exception handler for converting business exceptions
  * to appropriate gRPC status codes.
- * 
+ * <p>
  * This handler demonstrates:
  * - Proper gRPC error model implementation
  * - Exception mapping patterns
  * - Security considerations for error messages
  * - Structured error handling in reactive streams
- * 
+ * <p>
  * Learning objectives:
  * - Understand gRPC error model and status codes
  * - Learn about exception mapping in gRPC
@@ -29,7 +29,7 @@ public class GrpcExceptionHandler {
 
     /**
      * Maps business exceptions to appropriate gRPC StatusRuntimeException.
-     * 
+     * <p>
      * This method follows gRPC best practices by:
      * - Using appropriate status codes for different error types
      * - Providing informative but secure error messages
@@ -116,7 +116,7 @@ public class GrpcExceptionHandler {
 
     /**
      * Maps business exceptions with additional context information.
-     * 
+     * <p>
      * This overloaded method allows providing additional context that can be
      * useful for debugging while maintaining security for external clients.
      * 
@@ -133,11 +133,11 @@ public class GrpcExceptionHandler {
 
     /**
      * Sanitizes error messages to prevent information leakage.
-     * 
+     * <p>
      * This method ensures that error messages are informative for legitimate
      * clients but don't expose internal implementation details or sensitive
      * information that could be used maliciously.
-     * 
+     * <p>
      * Security considerations:
      * - Remove stack traces from client-facing messages
      * - Remove internal class names and package information
@@ -157,15 +157,15 @@ public class GrpcExceptionHandler {
                 // Remove package names and class references
                 .replaceAll("\\b[a-z]+\\.[a-z]+\\.[A-Za-z]+", "")
                 // Remove file paths
-                .replaceAll("\\b[A-Za-z]:\\\\[^\\s]+", "")
-                .replaceAll("\\b/[^\\s]+", "")
+                .replaceAll("\\b[A-Za-z]:\\\\\\S+", "")
+                .replaceAll("\\b/\\S+", "")
                 // Remove SQL-like patterns
                 .replaceAll("(?i)\\bselect\\b.*?\\bfrom\\b.*", "database query failed")
                 .replaceAll("(?i)\\binsert\\b.*?\\binto\\b.*", "database insert failed")
                 .replaceAll("(?i)\\bupdate\\b.*?\\bset\\b.*", "database update failed")
                 .replaceAll("(?i)\\bdelete\\b.*?\\bfrom\\b.*", "database delete failed")
                 // Remove connection strings
-                .replaceAll("(?i)jdbc:[^\\s]+", "database connection")
+                .replaceAll("(?i)jdbc:\\S+", "database connection")
                 // Clean up extra whitespace
                 .replaceAll("\\s+", " ")
                 .trim();
@@ -198,21 +198,21 @@ public class GrpcExceptionHandler {
 
     /**
      * Checks if an exception should be logged at ERROR level.
-     * 
+     * <p>
      * This method helps determine the appropriate log level based on
      * the exception type. Some exceptions are expected (like validation
      * errors) and should be logged at INFO/WARN level, while others
      * indicate serious problems and should be logged at ERROR level.
      * 
      * @param throwable the exception to check
-     * @return true if should be logged at ERROR level
+     * @return true if you should be logged at ERROR level
      */
     public boolean shouldLogAsError(Throwable throwable) {
         return switch (throwable) {
             case UserNotFoundException ignored -> false;
+            case DuplicateEmailException ignored -> false;
+            case InvalidNameException ignored -> false;
             case ValidationException ignored -> false;
-            // case DuplicateEmailException ignored -> false;
-            // case InvalidNameException ignored -> false;
             case IllegalArgumentException ignored -> false;
             default -> true;
         };
@@ -221,7 +221,7 @@ public class GrpcExceptionHandler {
     /**
      * Gets the appropriate gRPC status code for an exception without
      * creating a full StatusRuntimeException.
-     * 
+     * <p>
      * This method is useful for testing or when you need just the status
      * code for logging or metrics purposes.
      * 

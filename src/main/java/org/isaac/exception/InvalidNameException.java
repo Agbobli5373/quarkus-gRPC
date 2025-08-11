@@ -1,9 +1,9 @@
 package org.isaac.exception;
 
 /**
- * Exception thrown when a user name doesn't meet the required format or
+ * Exception thrown when a username doesn't meet the required format or
  * business rules.
- * 
+ * <p>
  * This exception handles name-specific validation rules such as:
  * - Name length requirements
  * - Character restrictions

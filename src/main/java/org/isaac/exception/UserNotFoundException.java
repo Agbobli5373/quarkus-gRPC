@@ -3,7 +3,7 @@ package org.isaac.exception;
 /**
  * Exception thrown when attempting to access a user that doesn't exist
  * in the system.
- * 
+ * <p>
  * This exception is used for operations like get, update, or delete
  * when the specified user ID cannot be found.
  */

@@ -34,7 +34,7 @@ public class NotificationService {
      * @return Multi stream of UserNotification for the subscriber
      */
     public Multi<UserNotification> subscribe(String clientId) {
-        logger.info("Client subscribing: " + clientId);
+        logger.info(String.format("Client subscribing: %s", clientId));
 
         // Create a broadcast processor for this subscriber
         BroadcastProcessor<UserNotification> processor = BroadcastProcessor.create();
@@ -45,7 +45,7 @@ public class NotificationService {
         // Return the Multi stream that will receive notifications
         return processor
                 .onCancellation().invoke(() -> {
-                    logger.info("Client unsubscribed: " + clientId);
+                    logger.info(String.format("Client unsubscribed: %s", clientId));
                     unsubscribe(clientId);
                 })
                 .onFailure().invoke(throwable -> {
@@ -63,7 +63,7 @@ public class NotificationService {
         BroadcastProcessor<UserNotification> processor = subscribers.remove(clientId);
         if (processor != null) {
             processor.onComplete();
-            logger.info("Client unsubscribed: " + clientId);
+            logger.info(String.format("Client unsubscribed: %s", clientId));
         }
     }
 
@@ -81,7 +81,7 @@ public class NotificationService {
                 .build();
 
         broadcastNotification(notification);
-        logger.info("Broadcasted user created notification for user: " + user.getId());
+        logger.info("Broadcast user created notification for user: " + user.getId());
     }
 
     /**
@@ -98,7 +98,7 @@ public class NotificationService {
                 .build();
 
         broadcastNotification(notification);
-        logger.info("Broadcasted user updated notification for user: " + user.getId());
+        logger.info("Broadcast user updated notification for user: " + user.getId());
     }
 
     /**
@@ -132,14 +132,14 @@ public class NotificationService {
      */
     private void broadcastNotification(UserNotification notification) {
         int subscriberCount = subscribers.size();
-        logger.info("Broadcasting notification to " + subscriberCount + " subscribers");
+        logger.info(String.format("Broadcasting notification to %d subscribers", subscriberCount));
 
         // Send notification to all active subscribers
         subscribers.forEach((clientId, processor) -> {
             try {
                 processor.onNext(notification);
             } catch (Exception e) {
-                logger.warning("Failed to send notification to client " + clientId + ": " + e.getMessage());
+                logger.warning(String.format("Failed to send notification to client %s: %s", clientId, e.getMessage()));
                 // Remove failed subscriber
                 unsubscribe(clientId);
             }
@@ -179,9 +179,7 @@ public class NotificationService {
      */
     public void cleanup() {
         logger.info("Cleaning up all subscriptions");
-        subscribers.forEach((clientId, processor) -> {
-            processor.onComplete();
-        });
+        subscribers.forEach((clientId, processor) -> processor.onComplete());
         subscribers.clear();
     }
 }

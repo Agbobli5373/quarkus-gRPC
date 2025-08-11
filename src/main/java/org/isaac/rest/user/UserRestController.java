@@ -3,9 +3,7 @@ package org.isaac.rest.user;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.quarkus.grpc.GrpcClient;
-import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
-import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -15,7 +13,6 @@ import org.isaac.dto.ErrorResponse;
 import org.isaac.dto.UpdateUserDto;
 import org.isaac.dto.UserDto;
 import org.isaac.grpc.user.*;
-import org.isaac.grpc.user.UserGrpcService;
 import org.isaac.grpc.user.UserProto.CreateUserRequest;
 import org.isaac.grpc.user.UserProto.DeleteUserRequest;
 import org.isaac.grpc.user.UserProto.GetUserRequest;
@@ -39,6 +36,7 @@ public class UserRestController {
 
     @GrpcClient
     UserService userGrpcClient;
+
 
     /**
      * Creates a new user via gRPC service call.
@@ -183,22 +181,14 @@ public class UserRestController {
             LOG.warnf("REST: gRPC error occurred - code=%s, message=%s", code, message);
 
             ErrorResponse errorResponse = switch (code) {
-                case NOT_FOUND -> {
-                    yield new ErrorResponse("User not found",
-                            message != null ? message : "The requested user was not found");
-                }
-                case INVALID_ARGUMENT -> {
-                    yield new ErrorResponse("Invalid request",
-                            message != null ? message : "The request contains invalid data");
-                }
-                case ALREADY_EXISTS -> {
-                    yield new ErrorResponse("User already exists",
-                            message != null ? message : "A user with this email already exists");
-                }
-                case PERMISSION_DENIED -> {
-                    yield new ErrorResponse("Permission denied",
-                            message != null ? message : "You don't have permission to perform this action");
-                }
+                case NOT_FOUND -> new ErrorResponse("User not found",
+                        message != null ? message : "The requested user was not found");
+                case INVALID_ARGUMENT -> new ErrorResponse("Invalid request",
+                        message != null ? message : "The request contains invalid data");
+                case ALREADY_EXISTS -> new ErrorResponse("User already exists",
+                        message != null ? message : "A user with this email already exists");
+                case PERMISSION_DENIED -> new ErrorResponse("Permission denied",
+                        message != null ? message : "You don't have permission to perform this action");
                 default -> {
                     LOG.errorf(throwable, "REST: Unexpected gRPC error - code=%s", code);
                     yield new ErrorResponse("Internal server error", "An unexpected error occurred");
